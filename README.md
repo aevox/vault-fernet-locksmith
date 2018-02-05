@@ -1,6 +1,7 @@
 ### **Vault-Fernet-Locksmith**
 
 Locksmith rotates periodically [Fernet Keys](https://github.com/fernet/spec) in a Hashicorp's [Vault](https://www.vaultproject.io).
+It is originally intended to link [keystone](https://docs.openstack.org/keystone/latest/) ([openstack](https://www.openstack.org/)) and vault for fernet keys management.
 
 Locksmith implements a lock feature using the [Consul](https://www.consul.io/) lock system to ensure that only one instance of this locksmith is running.
 
