@@ -60,6 +60,7 @@ func init() {
 
 func main() {
 	flag.Parse()
+	glog.V(2).Infof("Options: %v", options)
 	err := flagutil.SetFlagsFromEnv(flag.CommandLine, "VFL")
 	if err != nil {
 		glog.Fatalf("Cannot set flags from env: %v", err)
