@@ -101,7 +101,7 @@ func main() {
 
 	// Create goroutine to renew vault token
 	if options.vaultTokenRenew {
-		go vaultClient.RenewToken()
+		vaultClient.RenewToken()
 	}
 
 	if options.health {
