@@ -104,6 +104,24 @@ func main() {
 		go vaultClient.RenewToken()
 	}
 
+	if options.health {
+		health.Register("vaultChecker", health.PeriodicThresholdChecker(vaultChecker(vaultClient, options.secretPath), time.Second*15, 3))
+
+		go func() {
+			// create http server to expose health status
+			r := mux.NewRouter()
+
+			r.HandleFunc("/health", health.StatusHandler)
+
+			srv := &http.Server{
+				Handler:     r,
+				Addr:        "0.0.0.0:8080",
+				ReadTimeout: 15 * time.Second,
+			}
+			glog.Fatal(srv.ListenAndServe())
+		}()
+	}
+
 	if options.lock {
 		glog.V(1).Info("Creating consul client")
 		var consulToken string
@@ -171,23 +189,6 @@ func main() {
 		}()
 	}
 
-	if options.health {
-		health.Register("vaultChecker", health.PeriodicThresholdChecker(vaultChecker(vaultClient, options.secretPath), time.Second*15, 3))
-
-		go func() {
-			// create http server to expose health status
-			r := mux.NewRouter()
-
-			r.HandleFunc("/health", health.StatusHandler)
-
-			srv := &http.Server{
-				Handler:     r,
-				Addr:        "0.0.0.0:8080",
-				ReadTimeout: 15 * time.Second,
-			}
-			glog.Fatal(srv.ListenAndServe())
-		}()
-	}
 	glog.Info("Initialization complete")
 	glog.Info("Starting...")
 	locksmith.Run(vaultClient, options.secretPath, options.ttl)
