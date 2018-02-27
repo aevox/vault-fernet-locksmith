@@ -8,10 +8,6 @@ import (
 	vaultapi "github.com/hashicorp/vault/api"
 )
 
-const (
-	apiVersion = "v1"
-)
-
 // Vault represents a means for interacting with a remote Vault
 // instance (unsealed and pre-authenticated) to read and write secrets.
 type Vault struct {
