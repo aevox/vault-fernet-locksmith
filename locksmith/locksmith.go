@@ -124,14 +124,15 @@ func Smith(v *vault.Vault, path string, ttl int) error {
 	if err != nil {
 		return fmt.Errorf("Cannot read secret: %v", err)
 	}
-	if err := CheckKeysIntegrity(fkeys); err != nil {
-		return fmt.Errorf("Doing nothing: Keys have wrong format: %v", err)
-	}
-	glog.V(2).Infof("Keys read: %v", *fkeys)
 
 	if fkeys == nil {
 		return errors.New("Doing nothing: No fernet keys in vault")
 	}
+
+	if err := CheckKeysIntegrity(fkeys); err != nil {
+		return fmt.Errorf("Doing nothing: Keys have wrong format: %v", err)
+	}
+	glog.V(2).Infof("Keys read: %v", *fkeys)
 
 	if time.Now().Unix() > (fkeys.CreationTime + fkeys.Period - int64(ttl)) {
 		glog.Info("Rotating keys")
