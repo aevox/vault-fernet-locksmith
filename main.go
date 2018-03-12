@@ -17,9 +17,9 @@ import (
 	"github.com/gorilla/mux"
 	consulapi "github.com/hashicorp/consul/api"
 
-	"github.com/aevox/vault-fernet-locksmith/consul"
-	"github.com/aevox/vault-fernet-locksmith/locksmith"
-	"github.com/aevox/vault-fernet-locksmith/vault"
+	"github.com/aevox/vault-fernet-locksmith/pkg/consul"
+	"github.com/aevox/vault-fernet-locksmith/pkg/locksmith"
+	"github.com/aevox/vault-fernet-locksmith/pkg/vault"
 )
 
 var (

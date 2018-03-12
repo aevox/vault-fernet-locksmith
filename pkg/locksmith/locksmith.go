@@ -10,7 +10,7 @@ import (
 	"github.com/fernet/fernet-go"
 	"github.com/golang/glog"
 
-	"github.com/aevox/vault-fernet-locksmith/vault"
+	"github.com/aevox/vault-fernet-locksmith/pkg/vault"
 )
 
 // FernetKeys represents the fernet keys and their metadata

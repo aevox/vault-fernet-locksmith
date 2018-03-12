@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aevox/vault-fernet-locksmith/vault"
+	"github.com/aevox/vault-fernet-locksmith/pkg/vault"
 	consulapi "github.com/hashicorp/consul/api"
 
 	health "github.com/docker/go-healthcheck"
