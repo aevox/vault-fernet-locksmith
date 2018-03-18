@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -11,62 +10,34 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coreos/pkg/flagutil"
 	health "github.com/docker/go-healthcheck"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	consulapi "github.com/hashicorp/consul/api"
 
+	"github.com/aevox/vault-fernet-locksmith/pkg/config"
 	"github.com/aevox/vault-fernet-locksmith/pkg/consul"
 	"github.com/aevox/vault-fernet-locksmith/pkg/locksmith"
 	"github.com/aevox/vault-fernet-locksmith/pkg/vault"
 )
 
 var (
-	options          Options
+	cfg              config.Configuration
 	locksmithVersion string
 	lock             *consulapi.Lock
 	lockCh           <-chan struct{}
 )
 
-// Options is all the different options you can pass to locksmith
-type Options struct {
-	version         bool
-	lock            bool
-	lockKey         string
-	health          bool
-	consulToken     string
-	consulCreds     string
-	vaultToken      string
-	vaultTokenFile  string
-	vaultTokenRenew bool
-	secretPath      string
-	ttl             int
-}
-
 func init() {
-	flag.BoolVar(&options.version, "version", false, "Prints locksmith version, exits")
-	flag.BoolVar(&options.lock, "lock", false, "Acquires a lock with consul to ensure that only one instance of locksmith is running")
-	flag.StringVar(&options.lockKey, "lock-key", "locks/locksmith/.lock", "Key used for locking")
-	flag.BoolVar(&options.health, "health", false, "enable endpoint /health on port 8080")
-	flag.StringVar(&options.vaultToken, "vault-token", "", "Vault token used to authenticate with vault")
-	flag.StringVar(&options.vaultTokenFile, "vault-token-file", "", "File containing the vault token used to authenticate with vault")
-	flag.BoolVar(&options.vaultTokenRenew, "renew-vault-token", false, "Renew vault token")
-	flag.StringVar(&options.consulCreds, "consul-creds", "", "Path to consul token in vault")
-	flag.StringVar(&options.consulToken, "consul-token", "", "Consul token used to authenticate with consul")
-	flag.StringVar(&options.secretPath, "secret-path", "secret/fernet-keys", "Path to the fernet-keys secret in vault")
-	flag.IntVar(&options.ttl, "ttl", 120, "Interval between each vault secret fetch")
+	config.DefineCmdFlags(&cfg)
 }
 
 func main() {
-	flag.Parse()
-	glog.V(2).Infof("Options: %v", options)
-	err := flagutil.SetFlagsFromEnv(flag.CommandLine, "VFL")
-	if err != nil {
-		glog.Fatalf("Cannot set flags from env: %v", err)
+	if err := config.GetConfig(&cfg); err != nil {
+		glog.Fatalf("Error getting configuration: %v", err)
 	}
 
-	if options.version {
+	if cfg.Version {
 		fmt.Println(locksmithVersion)
 		os.Exit(0)
 	}
@@ -82,11 +53,11 @@ func main() {
 	glog.V(1).Info("setting vault token")
 
 	var vaultToken string
-	if options.vaultToken != "" {
+	if cfg.PrimaryVault.Token != "" {
 		glog.V(1).Info("Using vault token from command option")
-		vaultToken = options.vaultToken
-	} else if options.vaultTokenFile != "" {
-		data, err := ioutil.ReadFile(options.vaultTokenFile)
+		vaultToken = cfg.PrimaryVault.Token
+	} else if cfg.PrimaryVault.TokenFile != "" {
+		data, err := ioutil.ReadFile(cfg.PrimaryVault.TokenFile)
 		if err != nil {
 			glog.Fatalf("Cannot read token file: %v", err)
 		}
@@ -100,12 +71,12 @@ func main() {
 	vaultClient.Client.SetToken(vaultToken)
 
 	// Create goroutine to renew vault token
-	if options.vaultTokenRenew {
+	if cfg.PrimaryVault.TokenRenew {
 		vaultClient.RenewToken()
 	}
 
-	if options.health {
-		health.Register("vaultChecker", health.PeriodicThresholdChecker(vaultChecker(vaultClient, options.secretPath), time.Second*15, 3))
+	if cfg.Health {
+		health.Register("vaultChecker", health.PeriodicThresholdChecker(vaultChecker(vaultClient, cfg.SecretPath), time.Second*15, 3))
 
 		go func() {
 			// create http server to expose health status
@@ -122,39 +93,21 @@ func main() {
 		}()
 	}
 
-	if options.lock {
+	if cfg.Lock {
 		glog.V(1).Info("Creating consul client")
 		var consulToken string
-		if options.consulToken != "" {
-			glog.V(1).Info("Using consul token from option line")
-			consulToken = options.consulToken
-		} else if options.consulCreds != "" {
-			glog.V(1).Infof("Using consul credentials from vault: %v\n", options.consulCreds)
-			consulTokenSecret, err := vaultClient.ReadSecret(options.consulCreds)
-			if err != nil {
-				glog.Fatalf("Could not get consul token from vault: %v", err)
-			}
-			if consulTokenSecret.Data["token"] == nil {
-				glog.Fatalf("Consul token in vault secret not found")
-			}
-			if str, ok := (consulTokenSecret.Data["token"]).(string); ok {
-				consulToken = str
-			} else {
-				glog.Fatalf("Error converting token to string")
-			}
-			if consulTokenSecret.Renewable {
-				vaultClient.Renewer(consulTokenSecret)
-			}
+		if cfg.ConsulToken != "" {
+			consulToken = cfg.ConsulToken
 		}
 		consulClient, err := consul.NewClient(consulToken)
 		if err != nil {
 			glog.Fatalf("Failed to create consul client: %v", err)
 		}
-		if options.health {
-			health.Register("consulChecker", health.PeriodicThresholdChecker(consulChecker(consulClient.Client, options.lockKey), time.Second*15, 3))
+		if cfg.Health {
+			health.Register("consulChecker", health.PeriodicThresholdChecker(consulChecker(consulClient.Client, cfg.LockKey), time.Second*15, 3))
 		}
 		glog.Info("Attempting to acquire lock")
-		lock, err = consulClient.Client.LockKey(options.lockKey)
+		lock, err = consulClient.Client.LockKey(cfg.LockKey)
 		if err != nil {
 			glog.Fatalf("Lock setup failed :%v", err)
 		}
@@ -176,7 +129,7 @@ func main() {
 					os.Exit(1)
 				case sig := <-sigs:
 					glog.Infof("Recieved signal: %v", sig)
-					if options.lock {
+					if cfg.Lock {
 						// Attempt to release lock and destroy it
 						if err := consul.CleanLock(lock); err != nil {
 							glog.Errorf("Error cleaning consul lock: %v", err)
@@ -191,5 +144,5 @@ func main() {
 
 	glog.Info("Initialization complete")
 	glog.Info("Starting...")
-	locksmith.Run(vaultClient, options.secretPath, options.ttl)
+	locksmith.Run(vaultClient, cfg.SecretPath, cfg.TTL)
 }
