@@ -36,7 +36,7 @@ func NewClient() (*Vault, error) {
 	return &Vault{Client: client}, nil
 }
 
-// RenewToken starts a background process for renewing the vault token
+// RenewToken starts a goroutine that periodically renew the vault client token
 func (v *Vault) RenewToken() {
 	vaultSecret := &vaultapi.Secret{
 		Auth: &vaultapi.SecretAuth{

@@ -148,7 +148,7 @@ func Smith(v *vault.Vault, path string, ttl int) error {
 	return nil
 }
 
-// Run executes the Smith function every tt/2
+// Run executes the Smith function every ttl
 func Run(v *vault.Vault, path string, ttl int) {
 	for c := time.Tick(time.Duration(ttl) * time.Second); ; <-c {
 		if err := Smith(v, path, ttl); err != nil {
