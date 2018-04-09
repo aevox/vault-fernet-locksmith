@@ -15,16 +15,17 @@ type Vault struct {
 }
 
 // NewClient  creates a new vault client
-func NewClient() (*Vault, error) {
+func NewClient(address string, proxyURL string) (*Vault, error) {
 	config := vaultapi.DefaultConfig()
-
-	if err := config.ReadEnvironment(); err != nil {
-		return nil, fmt.Errorf("Cannot get config from env: %v", err)
-	}
 
 	// By default this added the system's CAs
 	if err := config.ConfigureTLS(&vaultapi.TLSConfig{Insecure: false}); err != nil {
 		return nil, fmt.Errorf("Failed to configureTLS: %v", err)
+	}
+
+	// Configure optionnal proxy
+	if proxyURL != "" {
+		config.HttpClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	}
 
 	// Create the client
