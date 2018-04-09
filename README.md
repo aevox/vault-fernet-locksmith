@@ -15,12 +15,16 @@ A simple `make` will build the project.
 Usage of ./bin/locksmith:
   -alsologtostderr
     	log to standard error as well as files
-  -consul-creds string
-    	Path to consul token in vault
+  -config-file string
+    	Name of config file (without extension)
+  -config-file-dir string
+    	Path to configuration file directory (default ".")
+  -consul-address string
+    	Consul address (default "http://127.0.0.1:8200")
   -consul-token string
     	Consul token used to authenticate with consul
   -health
-    	enable endpoint /health on port 8080
+    	Enable endpoint /health on port 8080
   -lock
     	Acquires a lock with consul to ensure that only one instance of locksmith is running
   -lock-key string
@@ -36,11 +40,13 @@ Usage of ./bin/locksmith:
   -secret-path string
     	Path to the fernet-keys secret in vault (default "secret/fernet-keys")
   -stderrthreshold value
-    	logs at or above this threshold go to stderr
+    	Logs at or above this threshold go to stderr
   -ttl int
     	Interval between each vault secret fetch (default 120)
   -v value
     	log level for V logs
+  -vault-address string
+    	Primary vault address (default "https://127.0.0.1:8500")
   -vault-token string
     	Vault token used to authenticate with vault
   -vault-token-file string
@@ -75,15 +81,16 @@ You can use the locksmith-bootsrap binary to write the first secret to vault.
 
 |  command line option |    environment option   |        default value       |
 |----------------------|-------------------------|----------------------------|
-| `-vault-token`       | `VAULT_TOKEN`           | `""`                       |
+| `-vault-token`       | `VFL_VAULT_TOKEN`       | `""`                       |
+| `-vault-address`     | `VFL_VAULT_ADDRESS`     | `""`                       |
 | `-renew-vault-token` | `VFL_RENEW_VAULT_TOKEN` | `false`                    |
 | `-secret-path`       | `VFL_SECRET_PATH`       | `"secret/fernet-keys"`     |
 | `-ttl`               | `VFL_TTL`               | `120`                      |
 | `-health`            | `VFL_HEALTH`            | `false`                    |
 | `-lock`              | `VFL_LOCK`              | `false`                    |
 | `-lock-key`          | `VFL_LOCK_KEY`          | `"locks/locksmith/.lock"`  |
-| `-consul-creds`      | `VFL_CONSUL_CREDS`      | `""`                       |
 | `-consul-token`      | `VFL_CONSUL_TOKEN`      | `""`                       |
+| `-consul-address`    | `VFL_CONSUL_ADDRESS`    | `""`                       |
 
 
 ##### **TODO**
