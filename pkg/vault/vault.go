@@ -3,6 +3,8 @@ package vault
 import (
 	"bytes"
 	"fmt"
+	"net/http"
+	"net/url"
 
 	"github.com/golang/glog"
 	vaultapi "github.com/hashicorp/vault/api"
@@ -15,8 +17,10 @@ type Vault struct {
 }
 
 // NewClient  creates a new vault client
-func NewClient(address string, proxyURL string) (*Vault, error) {
+func NewClient(address string, proxy string) (*Vault, error) {
 	config := vaultapi.DefaultConfig()
+
+	config.Address = address
 
 	// By default this added the system's CAs
 	if err := config.ConfigureTLS(&vaultapi.TLSConfig{Insecure: false}); err != nil {
@@ -24,7 +28,11 @@ func NewClient(address string, proxyURL string) (*Vault, error) {
 	}
 
 	// Configure optionnal proxy
-	if proxyURL != "" {
+	if proxy != "" {
+		proxyURL, err := url.Parse(proxy)
+		if err != nil {
+			fmt.Errorf("Error parsing proxy URL: %v", err)
+		}
 		config.HttpClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	}
 

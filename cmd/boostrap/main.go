@@ -91,7 +91,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := locksmith.WriteKeys(vaultClient, fernetKeys, opts.secretPath, opts.ttl); err != nil {
+	vl := make([]*vault.Vault, 0)
+	vl = append(vl, vaultClient)
+
+	ls := &locksmith.LockSmith{
+		VaultList: vl,
+		KeyPath:   opts.secretPath,
+		TTL:       opts.ttl,
+	}
+
+	if err := ls.WriteKeys(vaultClient, fernetKeys); err != nil {
 		fmt.Printf("Error writing fernet keys to vault")
 	}
 	fmt.Println("Success! New keys written in vault")

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -12,6 +13,12 @@ import (
 
 	"github.com/aevox/vault-fernet-locksmith/pkg/vault"
 )
+
+type LockSmith struct {
+	VaultList []*vault.Vault
+	KeyPath   string
+	TTL       int
+}
 
 // FernetKeys represents the fernet keys and their metadata
 type FernetKeys struct {
@@ -90,7 +97,7 @@ func CheckKeysIntegrity(fk *FernetKeys) error {
 		return errors.New("Keys list is nil")
 	}
 	if len(fk.Keys) < 3 {
-		return errors.New("Not enoug keys")
+		return errors.New("Not enough keys")
 	}
 	if fk.CreationTime == 0 {
 		return errors.New("Creation time is nil")
@@ -102,15 +109,15 @@ func CheckKeysIntegrity(fk *FernetKeys) error {
 }
 
 // WriteKeys writes the secret in vault
-func WriteKeys(v *vault.Vault, fs *FernetKeys, path string, ttl int) error {
-	ttlstring := strconv.Itoa(ttl) + "s"
+func (ls *LockSmith) WriteKeys(v *vault.Vault, fs *FernetKeys) error {
+	ttlstring := strconv.Itoa(ls.TTL) + "s"
 	m := map[string]interface{}{
 		"keys":          &fs.Keys,
 		"creation_time": &fs.CreationTime,
 		"period":        &fs.Period,
 		"ttl":           ttlstring}
 
-	if err := v.Write(path, m); err != nil {
+	if err := v.Write(ls.KeyPath, m); err != nil {
 		return fmt.Errorf("Error writing keys to vault :%v", err)
 	}
 	return nil
@@ -118,40 +125,61 @@ func WriteKeys(v *vault.Vault, fs *FernetKeys, path string, ttl int) error {
 
 // Smith reads the fernet keys in vault and rotates them when their age is about
 // to be equal to the period of rotation.
-func Smith(v *vault.Vault, path string, ttl int) error {
-	glog.V(1).Info("Reading secret")
-	fkeys, err := ReadFernetKeys(v, path)
-	if err != nil {
-		return fmt.Errorf("Cannot read secret: %v", err)
-	}
+func (ls *LockSmith) Smith() error {
+	var fkeysRef *FernetKeys
 
-	if fkeys == nil {
-		return errors.New("Doing nothing: No fernet keys in vault")
-	}
+	for i, v := range ls.VaultList {
+		vaultName := v.Client.Address()
 
-	if err := CheckKeysIntegrity(fkeys); err != nil {
-		return fmt.Errorf("Doing nothing: Keys have wrong format: %v", err)
-	}
-	glog.V(2).Infof("Keys read: %v", *fkeys)
-
-	if time.Now().Unix() > (fkeys.CreationTime + fkeys.Period - int64(ttl)) {
-		glog.Info("Rotating keys")
-		if err := fkeys.Rotate(); err != nil {
-			return fmt.Errorf("Error rotating keys: %v", err)
+		glog.V(1).Info("Reading secret")
+		fkeys, err := ReadFernetKeys(v, ls.KeyPath)
+		if err != nil {
+			return fmt.Errorf("Cannot read secret from %s: %v", vaultName, err)
 		}
-		glog.V(2).Infof("new keys: %v", *fkeys)
-		if err := WriteKeys(v, fkeys, path, ttl); err != nil {
-			return fmt.Errorf("Error writing keys to vault: %v", err)
+
+		if fkeys == nil {
+			return fmt.Errorf("Doing nothing: No fernet keys in %s", vaultName)
 		}
-		glog.Info("Rotation complete")
+
+		if err := CheckKeysIntegrity(fkeys); err != nil {
+			return fmt.Errorf("Doing nothing: Keys have wrong format: %v", err)
+		}
+		glog.V(2).Infof("Keys read (%s): %v", vaultName, *fkeys)
+
+		if i == 0 {
+			fkeysRef = fkeys
+		} else if !reflect.DeepEqual(fkeysRef, fkeys) {
+			return fmt.Errorf("Keys are not identical in all Vault.")
+		}
 	}
+
+	if time.Now().Unix() < (fkeysRef.CreationTime + fkeysRef.Period - int64(ls.TTL)) {
+		glog.Info("All keys are fresh, no rotation needed")
+		return nil
+	}
+
+	glog.Info("Rotating keys")
+	if err := fkeysRef.Rotate(); err != nil {
+		return fmt.Errorf("Error rotating keys: %v", err)
+	}
+	glog.V(2).Infof("New keys: %v", *fkeysRef)
+
+	for _, v := range ls.VaultList {
+		vaultName := v.Client.Address()
+
+		if err := ls.WriteKeys(v, fkeysRef); err != nil {
+			return fmt.Errorf("Error writing keys in %s: %v", vaultName, err)
+		}
+
+		glog.V(1).Infof("Rotation complete for %s", vaultName)
+	}
+
 	return nil
 }
 
-// Run executes the Smith function every ttl
-func Run(v *vault.Vault, path string, ttl int) {
-	for c := time.Tick(time.Duration(ttl) * time.Second); ; <-c {
-		if err := Smith(v, path, ttl); err != nil {
+func (ls *LockSmith) Run() {
+	for c := time.Tick(time.Duration(ls.TTL) * time.Second); ; <-c {
+		if err := ls.Smith(); err != nil {
 			glog.Error(err)
 			continue
 		}

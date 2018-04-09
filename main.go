@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -43,55 +42,60 @@ func main() {
 	}
 
 	glog.Info("Initializing...")
-	//Create vault client
-	vaultClient, err := vault.NewClient()
-	glog.V(1).Info("Creating vault client")
-	if err != nil {
-		glog.Fatalf("Failed to create vault client: %v", err)
-	}
-	//Set vault client token
-	glog.V(1).Info("setting vault token")
-
-	var vaultToken string
-	if cfg.PrimaryVault.Token != "" {
-		glog.V(1).Info("Using vault token from command option")
-		vaultToken = cfg.PrimaryVault.Token
-	} else if cfg.PrimaryVault.TokenFile != "" {
-		data, err := ioutil.ReadFile(cfg.PrimaryVault.TokenFile)
+	// Creating vault clients
+	glog.V(1).Info("Creating vault clients")
+	vaultsConfig := append([]config.VaultConfiguration{cfg.PrimaryVault}, cfg.SecondaryVaults...)
+	// vaultClients is a collection of vault clients. vaultClients[0] is the primary
+	var vaultClients []*vault.Vault
+	for i := 0; i < len(vaultsConfig); i++ {
+		vaultConfig := vaultsConfig[i]
+		vaultClient, err := vault.NewClient(vaultConfig.Address, vaultConfig.ProxyURL)
+		glog.V(1).Infof("Creating vault client for: %s", vaultConfig.Address)
 		if err != nil {
-			glog.Fatalf("Cannot read token file: %v", err)
+			glog.Fatalf("Failed to create vault client for %s: %v", vaultConfig.Address, err)
 		}
-		vaultToken = string(data)
-	} else if e := os.Getenv("VAULT_TOKEN"); e != "" {
-		glog.V(1).Info("Using vault token from environment")
-		vaultToken = strings.TrimSpace(e)
-	} else {
-		glog.Fatalf("No vault token provided")
-	}
-	vaultClient.Client.SetToken(vaultToken)
 
-	// Create goroutine to renew vault token
-	if cfg.PrimaryVault.TokenRenew {
-		vaultClient.RenewToken()
-	}
-
-	if cfg.Health {
-		health.Register("vaultChecker", health.PeriodicThresholdChecker(vaultChecker(vaultClient, cfg.SecretPath), time.Second*15, 3))
-
-		go func() {
-			// create http server to expose health status
-			r := mux.NewRouter()
-
-			r.HandleFunc("/health", health.StatusHandler)
-
-			srv := &http.Server{
-				Handler:     r,
-				Addr:        "0.0.0.0:8080",
-				ReadTimeout: 15 * time.Second,
+		//Set vault client token
+		var vaultToken string
+		if vaultConfig.Token != "" {
+			vaultToken = vaultConfig.Token
+		} else if vaultConfig.TokenFile != "" {
+			data, err := ioutil.ReadFile(vaultConfig.TokenFile)
+			glog.V(2).Infof("Reading token file %s", vaultConfig.TokenFile)
+			if err != nil {
+				glog.Fatalf("Cannot read vault token file: %v", err)
 			}
-			glog.Fatal(srv.ListenAndServe())
-		}()
+			vaultToken = string(data)
+		} else {
+			glog.Fatalf("No vault token provided for vault %d", i)
+		}
+		vaultClient.Client.SetToken(vaultToken)
+
+		// Create goroutine to renew vault token
+		if vaultConfig.TokenRenew {
+			vaultClient.RenewToken()
+		}
+
+		if cfg.Health {
+			health.Register(fmt.Sprintf("vaultChecker-%s", vaultClient.Client.Address()), health.PeriodicThresholdChecker(vaultChecker(vaultClient, cfg.SecretPath), time.Second*15, 3))
+		}
+
+		vaultClients = append(vaultClients, vaultClient)
 	}
+
+	go func() {
+		// create http server to expose health status
+		r := mux.NewRouter()
+
+		r.HandleFunc("/health", health.StatusHandler)
+
+		srv := &http.Server{
+			Handler:     r,
+			Addr:        "0.0.0.0:8080",
+			ReadTimeout: 15 * time.Second,
+		}
+		glog.Fatal(srv.ListenAndServe())
+	}()
 
 	if cfg.Lock {
 		glog.V(1).Info("Creating consul client")
@@ -144,5 +148,12 @@ func main() {
 
 	glog.Info("Initialization complete")
 	glog.Info("Starting...")
-	locksmith.Run(vaultClient, cfg.SecretPath, cfg.TTL)
+
+	ls := &locksmith.LockSmith{
+		VaultList: vaultClients,
+		KeyPath:   cfg.SecretPath,
+		TTL:       cfg.TTL,
+	}
+
+	ls.Run()
 }
