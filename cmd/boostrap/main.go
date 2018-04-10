@@ -5,42 +5,36 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strings"
 
+	"github.com/aevox/vault-fernet-locksmith/pkg/config"
 	"github.com/aevox/vault-fernet-locksmith/pkg/locksmith"
 	"github.com/aevox/vault-fernet-locksmith/pkg/vault"
 )
 
 var (
+	cfg              config.Configuration
 	opts             options
 	locksmithVersion string
 )
 
 type options struct {
-	version        bool
-	numKeys        int
-	secretPath     string
-	period         int64
-	vaultToken     string
-	vaultTokenFile string
-	ttl            int
+	numKeys int
+	period  int64
 }
 
 func init() {
-	flag.BoolVar(&opts.version, "version", false, "Prints version and exits")
-	flag.StringVar(&opts.vaultTokenFile, "vault-token-file", "", "File containing the vault token used to authenticate with vault")
-	flag.StringVar(&opts.vaultToken, "vault-token", "", "Vult token used to authenticate with vault")
-	flag.StringVar(&opts.secretPath, "secre-path", "secret/fernet-keys", "Path to the fernet-keys secret in vault")
-	flag.IntVar(&opts.ttl, "ttl", 120, "Freshness interval of the fernet token")
+	config.DefineCmdFlags(&cfg)
 	flag.IntVar(&opts.numKeys, "n", 3, "Number of fernet keys")
 	flag.Int64Var(&opts.period, "period", 3600, "Period of rotation")
 }
 
 func main() {
-	//Get configuration
-	flag.Parse()
+	if err := config.GetConfig(&cfg); err != nil {
+		fmt.Printf("Error getting configuration: %v", err)
+		os.Exit(1)
+	}
 
-	if opts.version {
+	if cfg.Version {
 		fmt.Println(locksmithVersion)
 		os.Exit(0)
 	}
@@ -50,39 +44,43 @@ func main() {
 		os.Exit(1)
 	}
 
-	//Create vault client
-	vaultClient, err := vault.NewClient()
-	if err != nil {
-		fmt.Printf("Failed to create vault client: %v", err)
-		os.Exit(1)
-	}
-	//Set vault client token
-	var vaultToken string
-	if opts.vaultToken != "" {
-		vaultToken = opts.vaultToken
-	} else if opts.vaultTokenFile != "" {
-		data, err := ioutil.ReadFile(opts.vaultTokenFile)
+	var vaultClients []*vault.Vault
+	vaultsConfig := append([]config.VaultConfiguration{cfg.PrimaryVault}, cfg.SecondaryVaults...)
+	for _, vaultConfig := range vaultsConfig {
+		vaultClient, err := vault.NewClient(vaultConfig.Address, vaultConfig.ProxyURL)
 		if err != nil {
-			fmt.Printf("Cannot read token file: %v\n", err)
+			fmt.Printf("Failed to create vault client for %s: %v", vaultConfig.Address, err)
 			os.Exit(1)
 		}
-		vaultToken = string(data)
-	} else if e := os.Getenv("VAULT_TOKEN"); e != "" {
-		vaultToken = strings.TrimSpace(e)
-	} else {
-		fmt.Println("No vault token provided")
-		os.Exit(1)
-	}
-	vaultClient.Client.SetToken(vaultToken)
+		//Set vault client token
+		var vaultToken string
+		if vaultConfig.Token != "" {
+			vaultToken = vaultConfig.Token
+		} else if vaultConfig.TokenFile != "" {
+			data, err := ioutil.ReadFile(vaultConfig.TokenFile)
+			if err != nil {
+				fmt.Printf("Cannot read vault token file: %v", err)
+				os.Exit(1)
+			}
+			vaultToken = string(data)
+		} else {
+			fmt.Printf("No vault token provided for vault %s", vaultClient.Client.Address())
+			os.Exit(1)
+		}
+		vaultClient.Client.SetToken(vaultToken)
 
-	k, err := vaultClient.Client.Logical().Read(opts.secretPath)
-	if err != nil {
-		fmt.Printf("Cannot read secret %s: %v", opts.secretPath, err)
-		os.Exit(1)
-	}
-	if k != nil {
-		fmt.Println("Doing nothing, a secret exists")
-		os.Exit(1)
+		k, err := vaultClient.Client.Logical().Read(cfg.SecretPath)
+		if err != nil {
+			fmt.Printf("Cannot read secret %s: %v", cfg.SecretPath, err)
+			os.Exit(1)
+		}
+
+		if k != nil {
+			fmt.Println("Doing nothing, a secret exists")
+			os.Exit(1)
+		}
+
+		vaultClients = append(vaultClients, vaultClient)
 	}
 
 	fernetKeys, err := locksmith.NewFernetKeys(opts.period, opts.numKeys)
@@ -91,17 +89,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	vl := make([]*vault.Vault, 0)
-	vl = append(vl, vaultClient)
-
 	ls := &locksmith.LockSmith{
-		VaultList: vl,
-		KeyPath:   opts.secretPath,
-		TTL:       opts.ttl,
+		VaultList: vaultClients,
+		KeyPath:   cfg.SecretPath,
+		TTL:       cfg.TTL,
 	}
 
-	if err := ls.WriteKeys(vaultClient, fernetKeys); err != nil {
-		fmt.Printf("Error writing fernet keys to vault")
+	if err := ls.WriteKeys(fernetKeys); err != nil {
+		fmt.Printf("Error bootstraping keys: %v", err)
 	}
+
 	fmt.Println("Success! New keys written in vault")
 }
