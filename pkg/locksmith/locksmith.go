@@ -109,7 +109,7 @@ func CheckKeysIntegrity(fk *FernetKeys) error {
 }
 
 // WriteKeys writes the secret in vault
-func (ls *LockSmith) WriteKeys(v *vault.Vault, fs *FernetKeys) error {
+func (ls *LockSmith) WriteKeys(fs *FernetKeys) error {
 	ttlstring := strconv.Itoa(ls.TTL) + "s"
 	m := map[string]interface{}{
 		"keys":          &fs.Keys,
@@ -117,8 +117,12 @@ func (ls *LockSmith) WriteKeys(v *vault.Vault, fs *FernetKeys) error {
 		"period":        &fs.Period,
 		"ttl":           ttlstring}
 
-	if err := v.Write(ls.KeyPath, m); err != nil {
-		return fmt.Errorf("Error writing keys to vault :%v", err)
+	for _, v := range ls.VaultList {
+		vaultName := v.Client.Address()
+		if err := v.Write(ls.KeyPath, m); err != nil {
+			return fmt.Errorf("Error writing keys to %s :%v", vaultName, err)
+		}
+		glog.V(1).Infof("Keys written to %s", vaultName)
 	}
 	return nil
 }
@@ -164,15 +168,10 @@ func (ls *LockSmith) Smith() error {
 	}
 	glog.V(2).Infof("New keys: %v", *fkeysRef)
 
-	for _, v := range ls.VaultList {
-		vaultName := v.Client.Address()
-
-		if err := ls.WriteKeys(v, fkeysRef); err != nil {
-			return fmt.Errorf("Error writing keys in %s: %v", vaultName, err)
-		}
-
-		glog.V(1).Infof("Rotation complete for %s", vaultName)
+	if err := ls.WriteKeys(fkeysRef); err != nil {
+		return fmt.Errorf("Rotation failed: %v", err)
 	}
+	glog.V(1).Infof("Rotation complete")
 
 	return nil
 }
