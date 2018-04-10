@@ -47,8 +47,7 @@ func main() {
 	vaultsConfig := append([]config.VaultConfiguration{cfg.PrimaryVault}, cfg.SecondaryVaults...)
 	// vaultClients is a collection of vault clients. vaultClients[0] is the primary
 	var vaultClients []*vault.Vault
-	for i := 0; i < len(vaultsConfig); i++ {
-		vaultConfig := vaultsConfig[i]
+	for _, vaultConfig := range vaultsConfig {
 		vaultClient, err := vault.NewClient(vaultConfig.Address, vaultConfig.ProxyURL)
 		glog.V(1).Infof("Creating vault client for: %s", vaultConfig.Address)
 		if err != nil {
@@ -67,7 +66,7 @@ func main() {
 			}
 			vaultToken = string(data)
 		} else {
-			glog.Fatalf("No vault token provided for vault %d", i)
+			glog.Fatalf("No vault token provided for %s", vaultClient.Client.Address())
 		}
 		vaultClient.Client.SetToken(vaultToken)
 
