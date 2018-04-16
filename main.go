@@ -98,11 +98,7 @@ func main() {
 
 	if cfg.Lock {
 		glog.V(1).Info("Creating consul client")
-		var consulToken string
-		if cfg.ConsulToken != "" {
-			consulToken = cfg.ConsulToken
-		}
-		consulClient, err := consul.NewClient(cfg.ConsulAddress, consulToken)
+		consulClient, err := consul.NewClient(cfg.ConsulAddress, cfg.ConsulToken)
 		if err != nil {
 			glog.Fatalf("Failed to create consul client: %v", err)
 		}
