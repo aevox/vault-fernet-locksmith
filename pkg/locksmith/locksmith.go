@@ -119,6 +119,7 @@ func (ls *LockSmith) WriteKeys(fs *FernetKeys) error {
 
 	for _, v := range ls.VaultList {
 		vaultName := v.Client.Address()
+		glog.Infof("Writing keys to %s", vaultName)
 		if err := v.Write(ls.KeyPath, m); err != nil {
 			return fmt.Errorf("Error writing keys to %s :%v", vaultName, err)
 		}
@@ -135,7 +136,7 @@ func (ls *LockSmith) Smith() error {
 	for i, v := range ls.VaultList {
 		vaultName := v.Client.Address()
 
-		glog.V(1).Info("Reading secret")
+		glog.V(1).Infof("Reading secret in %s", vaultName)
 		fkeys, err := ReadFernetKeys(v, ls.KeyPath)
 		if err != nil {
 			return fmt.Errorf("Cannot read secret from %s: %v", vaultName, err)
@@ -153,16 +154,16 @@ func (ls *LockSmith) Smith() error {
 		if i == 0 {
 			fkeysRef = fkeys
 		} else if !reflect.DeepEqual(fkeysRef, fkeys) {
-			return fmt.Errorf("Keys are not identical in all Vault.")
+			return fmt.Errorf("Doing nothing: Keys are not identical in each vaults.")
 		}
 	}
 
 	if time.Now().Unix() < (fkeysRef.CreationTime + fkeysRef.Period - int64(ls.TTL)) {
-		glog.Info("All keys are fresh, no rotation needed")
+		glog.V(1).Info("All keys are fresh, no rotation needed")
 		return nil
 	}
 
-	glog.Info("Rotating keys")
+	glog.Info("Time to rotate keys")
 	if err := fkeysRef.Rotate(); err != nil {
 		return fmt.Errorf("Error rotating keys: %v", err)
 	}
@@ -171,7 +172,7 @@ func (ls *LockSmith) Smith() error {
 	if err := ls.WriteKeys(fkeysRef); err != nil {
 		return fmt.Errorf("Rotation failed: %v", err)
 	}
-	glog.V(1).Infof("Rotation complete")
+	glog.Infof("Rotation complete")
 
 	return nil
 }
