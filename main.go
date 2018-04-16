@@ -102,7 +102,7 @@ func main() {
 		if cfg.ConsulToken != "" {
 			consulToken = cfg.ConsulToken
 		}
-		consulClient, err := consul.NewClient(consulToken)
+		consulClient, err := consul.NewClient(cfg.ConsulAddress, consulToken)
 		if err != nil {
 			glog.Fatalf("Failed to create consul client: %v", err)
 		}

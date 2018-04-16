@@ -1,6 +1,7 @@
 package consul
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/golang/glog"
@@ -13,8 +14,12 @@ type Consul struct {
 }
 
 // NewClient creates a new consul client
-func NewClient(token string) (*Consul, error) {
+func NewClient(address string, token string) (*Consul, error) {
+	if address == "" {
+		return nil, errors.New("Error creating consul client, consul address is empty")
+	}
 	config := consulapi.DefaultConfig()
+	config.Address = address
 	config.Token = token
 
 	client, err := consulapi.NewClient(config)
@@ -29,7 +34,7 @@ func NewClient(token string) (*Consul, error) {
 	return &Consul{Client: client}, nil
 }
 
-// cleanLock attempts to release a lock and destroy it
+// CleanLock attempts to release a lock and destroy it
 func CleanLock(lock *consulapi.Lock) error {
 	// Release the lock
 	glog.Infof("Attempting to release lock")
