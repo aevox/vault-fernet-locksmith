@@ -22,6 +22,7 @@ type Configuration struct {
 	LockKey         string               `mapstructure:"lock-key"`        // What key is used for the consul lock system
 	ConsulAddress   string               `mapstructure:"consul-address"`  // Consul address
 	ConsulToken     string               `mapstructure:"consul-token"`    // Consul token use to access consul to read configuration and write lockKey
+	HealthPeriod    int                  `mapstructure:"health-period"`  // Period between each health check in seconds
 	Version         bool                 `mapstructure:"version"`
 }
 
@@ -49,6 +50,7 @@ func DefineCmdFlags(cfg *Configuration) {
 	flag.BoolVar(&cfg.Lock, "lock", false, "Acquires a lock with consul to ensure that only one instance of locksmith is running")
 	flag.StringVar(&cfg.LockKey, "lock-key", "locks/locksmith/.lock", "Key used for locking")
 	flag.BoolVar(&cfg.Health, "health", false, "Enable endpoint /health on port 8080")
+	flag.IntVar(&cfg.HealthPeriod, "health-period", 30, "Period between each health check in seconds")
 	flag.StringVar(&cfg.ConsulAddress, "consul-address", "http://127.0.0.1:8200", "Consul address")
 	flag.StringVar(&cfg.ConsulToken, "consul-token", "", "Consul token used to authenticate with consul")
 }

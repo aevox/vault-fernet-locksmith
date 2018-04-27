@@ -76,7 +76,7 @@ func main() {
 		}
 
 		if cfg.Health {
-			health.Register(fmt.Sprintf("vaultChecker-%s", vaultClient.Client.Address()), health.PeriodicThresholdChecker(vaultChecker(vaultClient, cfg.SecretPath), time.Second*15, 3))
+                       health.Register(fmt.Sprintf("vaultChecker-%s", vaultClient.Client.Address()), health.PeriodicThresholdChecker(vaultChecker(vaultClient, cfg.SecretPath), time.Second*time.Duration(cfg.HealthPeriod), 3))
 		}
 
 		vaultClients = append(vaultClients, vaultClient)
@@ -103,7 +103,7 @@ func main() {
 			glog.Fatalf("Failed to create consul client: %v", err)
 		}
 		if cfg.Health {
-			health.Register("consulChecker", health.PeriodicThresholdChecker(consulChecker(consulClient.Client, cfg.LockKey), time.Second*15, 3))
+                       health.Register("consulChecker", health.PeriodicThresholdChecker(consulChecker(consulClient.Client, cfg.LockKey), time.Second*time.Duration(cfg.HealthPeriod), 3))
 		}
 		glog.Info("Attempting to acquire lock")
 		lock, err = consulClient.Client.LockKey(cfg.LockKey)
