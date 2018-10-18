@@ -73,7 +73,7 @@ func (v *Vault) Renewer(secret *vaultapi.Secret) {
 		select {
 		case err := <-renewer.DoneCh():
 			if err != nil {
-				glog.Fatalf("Error renewing lease: %v", err)
+				glog.Errorf("Error renewing lease: %v", err)
 			}
 
 			// Renewal is now over
