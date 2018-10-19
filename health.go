@@ -12,9 +12,12 @@ import (
 
 func vaultChecker(v *vault.Vault, path string) health.Checker {
 	return health.CheckFunc(func() error {
-		_, err := v.Read(path)
+		b, err := v.Read(path)
 		if err != nil {
 			return fmt.Errorf("Cannot access vault: %v", err)
+		}
+		if b == nil {
+			return fmt.Errorf("%s is empty in %s", path, v.Client.Address())
 		}
 		return nil
 	})
