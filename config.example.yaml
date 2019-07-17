@@ -1,0 +1,30 @@
+---
+vaults:
+  - address: https://vault-one.net:8200
+    proxy: http://vault-one-proxy.net
+    tokenFile: /etc/locksmith/vault-token
+    renewToken: true
+  - address: https://vault-two.net:8200
+    proxy: http://vault-two-proxy.net
+    token: 61d3adab-4e79-05aa-6f82-53a9afcc0bde
+    renewToken: true
+
+ttl: 120
+
+secretPath: secret/fernet-keys
+
+health: true
+
+healthPeriod: 120
+
+verbosity: info
+
+consul:
+  address: https://consul.net:8500
+  proxy: http://consul-proxy.net
+  lock: true
+  lockKey: locks/locksmith/.lock
+
+bootstrap:
+  numKeys: 3
+  period: 3600
